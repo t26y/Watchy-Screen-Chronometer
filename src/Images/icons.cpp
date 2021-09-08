@@ -1,6 +1,6 @@
 #include "icons.h"
 
-#include "rle.h"
+#include "../Screens/rle.h"
 
 const uint8_t bitmap_battery[] = {
     255, 0,  255, 0,  255, 0,  43,  16, 80,  16, 80, 16, 80, 16, 80, 16, 80, 16,

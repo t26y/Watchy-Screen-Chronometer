@@ -3,9 +3,9 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include "OptimaLTStd22pt7b.h"
-#include "OptimaLTStd7pt7b.h"
-#include "OptimaLTStd_Black32pt7b.h"
+#include "../Fonts/OptimaLTStd22pt7b.h"
+#include "../Fonts/OptimaLTStd7pt7b.h"
+#include "../Fonts/OptimaLTStd_Black32pt7b.h"
 #include "GetLocation.h"
 
 using namespace Watchy;
@@ -29,10 +29,14 @@ void rightJustify(const char *txt, uint16_t &yPos) {
 }
 
 void TimeScreen::show() {
+  Watchy::display.fillScreen(bgColor);
+
+}
+
+void TimeScreen::show_old() {
   tm t;
   time_t tt = now();
   localtime_r(&tt, &t);
-
   Watchy::display.fillScreen(bgColor);
 
   // hours

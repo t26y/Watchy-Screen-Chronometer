@@ -1,6 +1,6 @@
 #include "ShowOrientationScreen.h"
 
-#include "OptimaLTStd12pt7b.h"
+#include "../Fonts/OptimaLTStd12pt7b.h"
 #include "Watchy.h"
 
 void ShowOrientationScreen::showMe() {

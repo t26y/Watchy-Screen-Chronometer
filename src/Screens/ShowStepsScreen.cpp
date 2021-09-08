@@ -1,6 +1,6 @@
 #include "ShowStepsScreen.h"
 
-#include "OptimaLTStd22pt7b.h"
+#include "../Fonts/OptimaLTStd22pt7b.h"
 #include "Watchy.h"
 
 void ShowStepsScreen::show() {

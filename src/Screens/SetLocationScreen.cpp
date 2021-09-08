@@ -1,6 +1,6 @@
 #include "SetLocationScreen.h"
 
-#include "OptimaLTStd12pt7b.h"
+#include "../Fonts/OptimaLTStd12pt7b.h"
 #include "GetLocation.h"
 #include "IPAddress.h"
 

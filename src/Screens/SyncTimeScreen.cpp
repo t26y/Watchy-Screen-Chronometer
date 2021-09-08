@@ -1,7 +1,7 @@
 #include "SyncTimeScreen.h"
 
 #include "GetLocation.h"
-#include "OptimaLTStd12pt7b.h"
+#include "../Fonts/OptimaLTStd12pt7b.h"
 #include "SyncTime.h"
 #include "Watchy.h"
 #include "WatchyErrors.h"

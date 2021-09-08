@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Adafruit_GFX.h"
-#include "OptimaLTStd12pt7b.h"
+#include "../Fonts/OptimaLTStd12pt7b.h"
 #include "Screen.h"
 
 typedef struct {
