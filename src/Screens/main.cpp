@@ -1,3 +1,7 @@
+#include <time.h>
+
+#include "../Fonts/OptimaLTStd22pt7b.h"
+#include "../Images/icons.h"
 #include "BuzzScreen.h"
 #include "CarouselScreen.h"
 #include "GetLocation.h"
@@ -5,7 +9,6 @@
 #include "IconScreen.h"
 #include "ImageScreen.h"
 #include "MenuScreen.h"
-#include "../Fonts/OptimaLTStd22pt7b.h"
 #include "SetLocationScreen.h"
 #include "SetTimeScreen.h"
 #include "SetupWifiScreen.h"
@@ -22,9 +25,6 @@
 #include "WatchyErrors.h"
 #include "WeatherScreen.h"
 #include "WrappedTextScreen.h"
-#include "../Images/icons.h"
-
-#include <time.h>
 
 SetTimeScreen setTimeScreen;
 SetupWifiScreen setupWifiScreen;
@@ -83,8 +83,8 @@ CarouselScreen carousel(carouselItems,
                         sizeof(carouselItems) / sizeof(carouselItems[0]));
 
 void setup() {
-  LOGD(); // fail if debugging macros not defined
-
+  LOGD();  // fail if debugging macros not defined
+  Serial.begin(115200);
   // initializing time and location can be a little tricky, because the
   // calls can fail for a number of reasons, but you don't want to just
   // keep trying because you can't know if the error is transient or
@@ -97,7 +97,9 @@ void setup() {
   if (Watchy_GetLocation::lastGetLocationTS == 0) {
     Watchy_GetLocation::getLocation();
   }
-  if (Watchy::screen == nullptr) { Watchy::screen = &carousel; }
+  if (Watchy::screen == nullptr) {
+    Watchy::screen = &carousel;
+  }
   Watchy::init();
 }
 
