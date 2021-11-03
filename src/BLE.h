@@ -11,29 +11,29 @@
 
 #include "config.h"
 
-class BLE;
-
 class BLE
 {
-  public:
+ private:
+  String local_name;
 
-    BLE(void);
-    ~BLE(void);
+  BLEServer* pServer = NULL;
 
-    bool begin(const char* localName);
-    int updateStatus();
-    int howManyBytes();
-  
-  private:
-    String local_name;
+  BLEService* pESPOTAService = NULL;
+  BLECharacteristic* pESPOTAIdCharacteristic = NULL;
 
-    BLEServer *pServer = NULL;
+  BLEService* pService = NULL;
+  BLECharacteristic* pVersionCharacteristic = NULL;
+  BLECharacteristic* pOtaCharacteristic = NULL;
+  BLECharacteristic* pWatchFaceNameCharacteristic = NULL;
 
-    BLEService *pESPOTAService = NULL;
-    BLECharacteristic * pESPOTAIdCharacteristic = NULL;
+ public:
+  BLE(){};
 
-    BLEService *pService = NULL;
-    BLECharacteristic * pVersionCharacteristic = NULL;
-    BLECharacteristic * pOtaCharacteristic = NULL;
-    BLECharacteristic * pWatchFaceNameCharacteristic = NULL;
+  int status = -1;
+  int bytesReceived = 0;
+  bool updateFlag = false;
+
+  void begin(const char* localName = "Watchy BLE OTA");
+  int getStatus() { return status; };
+  int getBytesReceived() { return bytesReceived; };
 };

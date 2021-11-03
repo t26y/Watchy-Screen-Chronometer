@@ -18,6 +18,7 @@ void printWeather(Watchy_GetWeather::weatherData wd) {
 }
 
 void GetWeatherScreen::show() {
+  Watchy_Event::setUpdateInterval(0);
   Watchy::display.fillScreen(bgColor);
   Watchy::display.setFont(OptimaLTStd12pt7b);
   switch (getWeatherState) {

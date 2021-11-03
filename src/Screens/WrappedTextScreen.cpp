@@ -5,6 +5,7 @@
 #include "Watchy.h"
 
 void WrappedTextScreen::show() {
+  Watchy_Event::setUpdateInterval(0);
   const int16_t margin = 20;
   const uint16_t fgColor = (bgColor == GxEPD_WHITE ? GxEPD_BLACK : GxEPD_WHITE);
   Watchy::display.fillScreen(bgColor);

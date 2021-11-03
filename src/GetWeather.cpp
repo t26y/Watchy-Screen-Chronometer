@@ -20,9 +20,9 @@ weatherData getWeather() {
     Watchy::err = Watchy::RATE_LIMITED;
     return currentWeather;
   }
-  if (!Watchy::connectWiFi()) {
+  if (!Watchy::getWiFi()) {
     Watchy::err = Watchy::WIFI_FAILED;
-    LOGE("Wifi connect failed");
+    log_e("Wifi connect failed");
     // No WiFi, return RTC Temperature (this isn't actually useful...)
     uint8_t temperature = Watchy::RTC.temperature() / 4;  // celsius
     if (strcmp(TEMP_UNIT, "imperial") == 0) {
@@ -41,13 +41,15 @@ weatherData getWeather() {
       strlen("&units=") + strlen(TEMP_UNIT) + strlen("&appid=") +
       strlen(OPENWEATHERMAP_APIKEY) + 1;
   char weatherQueryURL[weatherQueryURLSize];
-  auto loc = Watchy_GetLocation::getLocation();
+  Watchy_GetLocation::getLocation(); // maybe update location?
   snprintf(weatherQueryURL, weatherQueryURLSize,
            "%s?lat=%.4f&lon=%.4f&units=%s&appid=%s", OPENWEATHERMAP_URL,
-           loc->lat, loc->lon, TEMP_UNIT, OPENWEATHERMAP_APIKEY);
+           Watchy_GetLocation::currentLocation.lat,
+           Watchy_GetLocation::currentLocation.lon, TEMP_UNIT,
+           OPENWEATHERMAP_APIKEY);
   if (!http.begin(weatherQueryURL)) {
     Watchy::err = Watchy::REQUEST_FAILED;
-    LOGE("http.begin failed");
+    log_e("http.begin failed");
   } else {
     int httpResponseCode = http.GET();
     if (httpResponseCode == 200) {
@@ -56,19 +58,17 @@ weatherData getWeather() {
       currentWeather.temperature = int(responseObject["main"]["temp"]);
       currentWeather.weatherConditionCode =
           int(responseObject["weather"][0]["id"]);
-      strncpy(currentWeather.weatherCity, loc->city,
+      strncpy(currentWeather.weatherCity, Watchy_GetLocation::currentLocation.city,
               sizeof(currentWeather.weatherCity));
       lastGetWeatherTS = now();
       Watchy::err = Watchy::OK;
     } else {
       Watchy::err = Watchy::REQUEST_FAILED;
-      LOGE("http response %d", httpResponseCode);
+      log_e("http response %d", httpResponseCode);
     }
     http.end();
   }
-  // turn off radios
-  WiFi.mode(WIFI_OFF);
-  btStop();
+  Watchy::releaseWiFi();
   return currentWeather;
 }
 

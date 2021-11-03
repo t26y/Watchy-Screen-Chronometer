@@ -1,14 +1,13 @@
-#include <time.h>
-
-#include "../Fonts/OptimaLTStd22pt7b.h"
-#include "../Images/icons.h"
 #include "BuzzScreen.h"
 #include "CarouselScreen.h"
+#include "Events.h"
 #include "GetLocation.h"
 #include "GetWeatherScreen.h"
 #include "IconScreen.h"
 #include "ImageScreen.h"
 #include "MenuScreen.h"
+#include "OptimaLTStd22pt7b.h"
+#include "OTAScreen.h"
 #include "SetLocationScreen.h"
 #include "SetTimeScreen.h"
 #include "SetupWifiScreen.h"
@@ -25,6 +24,9 @@
 #include "WatchyErrors.h"
 #include "WeatherScreen.h"
 #include "WrappedTextScreen.h"
+#include "icons.h"
+
+#include <time.h>
 
 SetTimeScreen setTimeScreen;
 SetupWifiScreen setupWifiScreen;
@@ -33,10 +35,12 @@ SyncTimeScreen syncTimeScreen;
 SetLocationScreen setLocationScreen;
 GetWeatherScreen getWeatherScreen;
 BuzzScreen buzzScreen;
+OTAScreen otaScreen;
 
 MenuItem menuItems[] = {{"Set Time", &setTimeScreen},
                         {"Setup WiFi", &setupWifiScreen},
-                        {"Update Firmware", &updateFWScreen},
+                        {"Update (OTA)", &otaScreen},
+                        {"Update (BLE)", &updateFWScreen},
                         {"Sync Time", &syncTimeScreen},
                         {"Set Location", &setLocationScreen},
                         {"Get Weather", &getWeatherScreen},
@@ -82,20 +86,35 @@ CarouselItem carouselItems[] = {{&timeScreen, nullptr},
 CarouselScreen carousel(carouselItems,
                         sizeof(carouselItems) / sizeof(carouselItems[0]));
 
+Watchy_Event::BackgroundTask timeSync("timeSync", [](void* p) {
+  Watchy_SyncTime::syncTime(Watchy_GetLocation::currentLocation.timezone);
+});
+
+Watchy_Event::BackgroundTask getLocation("getLocation", [](void* p) {
+  Watchy_GetLocation::getLocation();
+});
+
 void setup() {
-  LOGD();  // fail if debugging macros not defined
   Serial.begin(115200);
-  // initializing time and location can be a little tricky, because the
+#if 0
+  esp_log_level_set("*", static_cast<esp_log_level_t>(CORE_DEBUG_LEVEL));
+#endif
+  log_d(); // fail if debugging macros not defined
+
+  Watchy_Event::start();
+
+ // initializing time and location can be a little tricky, because the
   // calls can fail for a number of reasons, but you don't want to just
   // keep trying because you can't know if the error is transient or
   // persistent. So whenever we wake up, try to sync the time and location
   // if they haven't ever been synced. If there is a persistent failure
   // this can drain your battery...
-  if (Watchy_SyncTime::lastSyncTimeTS == 0) {
-    Watchy_SyncTime::syncTime(Watchy_GetLocation::currentLocation.timezone);
+  if (Watchy_SyncTime::lastSyncTimeTS < SECS_YR_2000) {
+    timeSync.begin();
   }
-  if (Watchy_GetLocation::lastGetLocationTS == 0) {
-    Watchy_GetLocation::getLocation();
+
+  if (Watchy_GetLocation::lastGetLocationTS < SECS_YR_2000) {
+    getLocation.begin();
   }
   if (Watchy::screen == nullptr) {
     Watchy::screen = &carousel;
@@ -103,4 +122,12 @@ void setup() {
   Watchy::init();
 }
 
-void loop() {}  // this should never run, Watchy deep sleeps after init();
+void loop() {
+  // should never be called, but if it is we want to know how often
+  static int count;
+  count++;
+  if (count % 10000 == 0) {
+    log_i("%d", count/10000);
+  }
+  Watchy_Event::handle();
+}

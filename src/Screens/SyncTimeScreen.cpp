@@ -29,6 +29,7 @@ void printSyncState() {
 }
 
 void SyncTimeScreen::show() {
+  Watchy_Event::setUpdateInterval(0);
   Watchy::display.fillScreen(bgColor);
   Watchy::display.setFont(OptimaLTStd12pt7b);
   if (syncState != ready) {

@@ -19,7 +19,7 @@ RTC_DATA_ATTR time_t lastGetLocationTS = 0;  // can use this to throttle
 RTC_DATA_ATTR location currentLocation = {
     DEFAULT_LOCATION_LATITUDE,       // lat
     DEFAULT_LOCATION_LONGDITUDE,     // lon
-    "AEST-10AEDT,M10.1.0,M4.1.0/3",  // timezone
+    DEFAULT_TIMEZONE,  // timezone
     "Melbourne"                      // default location is in Melbourne
 };
 
@@ -757,7 +757,7 @@ uint32_t fnvHash(const char *str) {
 // hashed values. It assumes that the "olson" string is a valid timezone name
 // from the same version of the tzdb as it was compiled for. If passed an
 // invalid string the behaviour is undefined.
-const char *getPosixTZforOlson(const char *olson, char *buf, size_t buflen) {
+const char *getPosixTZforOlson(const char *olson) {
   static_assert(NumZones > 0, "zones should not be empty");
   auto olsonHash = fnvHash(olson) & mask;
   auto i = &zones[0];
@@ -771,34 +771,35 @@ const char *getPosixTZforOlson(const char *olson, char *buf, size_t buflen) {
     }
   }
   if (i->hash == olsonHash) {
-    return strncpy(buf, posix[i->posix], buflen);
+    return posix[i->posix];
   }
-  return nullptr;
+  return "UTC0"; // couldn't find it, use default
 }
 
-const location *getLocation() {
+void getLocation() {
   // http://ip-api.com/json?fields=57792
   // {"status":"success","lat":-27.4649,"lon":153.028,"timezone":"Australia/Brisbane","query":"202.144.174.72"}
-  if (lastGetLocationTS &&
-      (now() - lastGetLocationTS < LOCATION_UPDATE_INTERVAL)) {  // too soon
+  if (now() - lastGetLocationTS < LOCATION_UPDATE_INTERVAL) {  // too soon
+    log_i("%ld-%ld=%ld", now(), lastGetLocationTS, now() - lastGetLocationTS);
     Watchy::err = Watchy::RATE_LIMITED;
-    return &currentLocation;
+    return;
   }
-  if (!Watchy::connectWiFi()) {
-    LOGE("connectWiFi failed");
+  if (!Watchy::getWiFi()) {
+    log_e("getWiFi failed");
     Watchy::err = Watchy::WIFI_FAILED;
-    return &currentLocation;
+    return;
   }
 
+  auto start = millis();
   // WiFi is connected Use IP-API.com API to map geo-located IP to lat/lon/etc
   HTTPClient http;
-  http.setConnectTimeout(5000);  // 5 second max timeout
+  http.setConnectTimeout(5000);  // 5 second connect timeout
   // fields is a pseudo-bitmap indicating which fields should be returned
   // ex. 57792 - query, status, lat, lon, timezone
   // ex. 57808 - query, status, lat, lon, timezone, city
   const char *locationQueryURL = "http://ip-api.com/json?fields=57808";
   if (!http.begin(locationQueryURL)) {
-    LOGE("http.begin failed");
+    log_e("http.begin failed");
     Watchy::err = Watchy::REQUEST_FAILED;
   } else {
     int httpResponseCode = http.GET();
@@ -810,25 +811,28 @@ const location *getLocation() {
       loc.lon = double(responseObject["lon"]);
       strncpy(loc.city, responseObject["city"], sizeof(loc.city));
 
-      auto olsonTZ = (const char *)responseObject["timezone"];
-      if (getPosixTZforOlson(olsonTZ, loc.timezone, sizeof(loc.timezone))) {
-        currentLocation = loc;
+      const char* olsonTZ = static_cast<const char *>(responseObject["timezone"]);
+      loc.timezone = getPosixTZforOlson(olsonTZ);
+      if ( loc.timezone ) {
+        Watchy_Event::Event{
+            .id = Watchy_Event::LOCATION_UPDATE,
+            .micros = micros(),
+            {.loc = loc},
+        }.send();
         lastGetLocationTS = now();
         Watchy::err = Watchy::OK;
       } else {
-        LOGE("getPosixTZForOlson failed");
+        log_e("getPosixTZForOlson failed");
         Watchy::err = Watchy::REQUEST_FAILED;
       }
     } else {
-      LOGE("http error %d", httpResponseCode);
+      log_e("http error %d", httpResponseCode);
       Watchy::err = Watchy::REQUEST_FAILED;
       // http error
     }
     http.end();
   }
-  // turn off radios
-  WiFi.mode(WIFI_OFF);
-  btStop();
-  return &currentLocation;
+  log_i("getLocation took %ldms", millis() - start);
+  Watchy::releaseWiFi();
 }
 }  // namespace Watchy_GetLocation

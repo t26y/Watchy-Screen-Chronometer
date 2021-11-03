@@ -3,6 +3,7 @@
 #include "Watchy.h"
 
 void BuzzScreen::show() {
+  Watchy_Event::setUpdateInterval(0);
   pinMode(VIB_MOTOR_PIN, OUTPUT);
   // five cycles of 3 buzzes each
   for (int c = 0; c < 5; c++) {
