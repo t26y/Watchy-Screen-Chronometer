@@ -2,29 +2,30 @@
 
 #include <vector>
 
+#include "Events.h"
 #include "GetLocation.h"  // bad dependency
 #include "Screen.h"
+#include "Sensor.h"
 #include "WatchyErrors.h"
 
-using namespace Watchy;
+namespace Watchy {
 
-Error Watchy::err;
+Error err;
 
 void _rtcConfig();
-void _bmaConfig();
 uint16_t _readRegister(uint8_t address, uint8_t reg, uint8_t *data,
                        uint16_t len);
 uint16_t _writeRegister(uint8_t address, uint8_t reg, uint8_t *data,
                         uint16_t len);
 
-DS3232RTC Watchy::RTC(false);
-GxEPD2_BW<GxEPD2_154_D67, GxEPD2_154_D67::HEIGHT> Watchy::display(
-    GxEPD2_154_D67(CS, DC, RESET, BUSY));
-RTC_DATA_ATTR Screen *Watchy::screen = nullptr;
+DS3232RTC RTC(false);
+GxEPD2_BW<GxEPD2_154_D67, GxEPD2_154_D67::HEIGHT> display(
+  GxEPD2_154_D67(CS, DC, RESET, BUSY));
+RTC_DATA_ATTR Screen *screen = nullptr;
 
-RTC_DATA_ATTR BMA423 Watchy::sensor;
-RTC_DATA_ATTR bool Watchy::WIFI_CONFIGURED;
-RTC_DATA_ATTR bool Watchy::BLE_CONFIGURED;
+RTC_DATA_ATTR BMA423 sensor;
+RTC_DATA_ATTR bool WIFI_CONFIGURED;
+RTC_DATA_ATTR bool BLE_CONFIGURED;
 
 String getValue(String data, char separator, int index) {
   int found = 0;
@@ -42,102 +43,149 @@ String getValue(String data, char separator, int index) {
   return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
 }
 
-void debounce(uint8_t pin, int state) {
-  // wait for changed state + 40ms
-  // or 400ms
-  unsigned long timeout = millis() + 400;
-  while (millis() < timeout) {
-    if (digitalRead(pin) != state) {
-      delay(min(timeout - millis(), 40ul));
-      break;
-    }
-    yield();
-  }
-}
-
-bool Watchy::pollButtonsAndDispatch()  // returns true if button was pressed
-{
-  if (digitalRead(MENU_BTN_PIN) == 1) {
-    debounce(MENU_BTN_PIN, 1);
-    screen->menu();
-    return true;
-  }
-  if (digitalRead(BACK_BTN_PIN) == 1) {
-    debounce(BACK_BTN_PIN, 1);
-    screen->back();
-    return true;
-  }
-  if (digitalRead(UP_BTN_PIN) == 1) {
-    debounce(UP_BTN_PIN, 1);
-    screen->up();
-    return true;
-  }
-  if (digitalRead(DOWN_BTN_PIN) == 1) {
-    debounce(DOWN_BTN_PIN, 1);
-    screen->down();
-    return true;
-  }
-  return false;
-}
-
-void fastEventLoop() {
-  // TODO need a way for handlers to say they're done with the ui
-  const int timeout = 5000;
-  long timeoutMillis = millis() + timeout;
-  pinMode(MENU_BTN_PIN, INPUT);
-  pinMode(BACK_BTN_PIN, INPUT);
-  pinMode(UP_BTN_PIN, INPUT);
-  pinMode(DOWN_BTN_PIN, INPUT);
-  while (millis() < timeoutMillis) {
-    if (pollButtonsAndDispatch()) {
-      timeoutMillis = millis() + timeout;
-    }
-    yield();
-  }
-}
-
 void handleButtonPress() {
   uint64_t wakeupBit = esp_sleep_get_ext1_wakeup_status();
   switch (wakeupBit & BTN_PIN_MASK) {
-    case MENU_BTN_MASK: screen->menu(); break;
-    case BACK_BTN_MASK: screen->back(); break;
-    case UP_BTN_MASK:   screen->up();   break;
-    case DOWN_BTN_MASK: screen->down(); break;
-    default:                            break;
+    case MENU_BTN_MASK:
+      Watchy_Event::Event{
+          .id = Watchy_Event::MENU_BTN_DOWN,
+          .micros = micros(),
+      }.send();
+      break;
+    case BACK_BTN_MASK:
+      Watchy_Event::Event{
+          .id = Watchy_Event::BACK_BTN_DOWN,
+          .micros = micros(),
+      }.send();
+      break;
+    case UP_BTN_MASK:
+      Watchy_Event::Event{
+          .id = Watchy_Event::UP_BTN_DOWN,
+          .micros = micros(),
+      }.send();
+      break;
+    case DOWN_BTN_MASK:
+      Watchy_Event::Event{
+          .id = Watchy_Event::DOWN_BTN_DOWN,
+          .micros = micros(),
+      }.send();
+      break;
+    default:
+      break;
   }
-  fastEventLoop();
 }
 
-tmElements_t Watchy::currentTime; // should probably be in SyncTime
+QueueHandle_t i2cMutex = xSemaphoreCreateRecursiveMutex();
+
+tmElements_t currentTime;  // should probably be in SyncTime
 
 // doesn't persist over deep sleep. don't care.
 std::vector<OnWakeCallback> owcVec;
 
-void Watchy::AddOnWakeCallback(const OnWakeCallback owc) {
-  owcVec.push_back(owc);
+void AddOnWakeCallback(const OnWakeCallback owc) { owcVec.push_back(owc); }
+
+const char *wakeupReasonToString(esp_sleep_wakeup_cause_t wakeup_reason) {
+  switch (wakeup_reason) {
+    case ESP_SLEEP_WAKEUP_UNDEFINED:
+      return ("UNDEFINED");
+    case ESP_SLEEP_WAKEUP_ALL:
+      return ("ALL");
+    case ESP_SLEEP_WAKEUP_EXT0:
+      return ("EXT0");
+    case ESP_SLEEP_WAKEUP_EXT1:
+      return ("EXT1");
+    case ESP_SLEEP_WAKEUP_TIMER:
+      return ("TIMER");
+    case ESP_SLEEP_WAKEUP_TOUCHPAD:
+      return ("TOUCHPAD");
+    case ESP_SLEEP_WAKEUP_ULP:
+      return ("ULP");
+    case ESP_SLEEP_WAKEUP_GPIO:
+      return ("GPIO");
+    case ESP_SLEEP_WAKEUP_UART:
+      return ("UART");
+    default:
+      return ("unknown");
+  }
 }
 
-void Watchy::init() {
-  esp_sleep_wakeup_cause_t wakeup_reason;
-  wakeup_reason = esp_sleep_get_wakeup_cause();  // get wake up reason
-  Wire.begin(SDA, SCL);                          // init i2c
+uint64_t start;
+
+bool validTime(const tmElements_t &t) {
+  if (t.Second >= 60) {
+    return false;
+  }
+  if (t.Minute >= 60) {
+    return false;
+  }
+  if (t.Hour >= 24) {
+    return false;
+  }
+  if (t.Month > 12) {
+    return false;
+  }
+  if (t.Day > 31) {
+    return false;
+  }
+  if (t.Wday > 7) {
+    return false;
+  }
+  return true;
+}
+
+bool fixTime(tmElements_t &t) {
+  if (t.Second >= 60) {
+    t.Second = 0;
+  }
+  if (t.Minute >= 60) {
+    t.Minute = 0;
+  }
+  if (t.Hour >= 24) {
+    t.Hour = 0;
+  }
+  if (t.Month > 12) {
+    t.Month = 1;
+  }
+  if (t.Day > 31) {
+    t.Day = 1;
+  }
+  if (t.Wday > 7) {
+    t.Wday = 1;
+  }
+  return (RTC.write(t) == 0);
+}
+
+void initTime() {
+  Wire.begin(SDA, SCL);  // init i2c
 
   // sync ESP32 clocks to RTC
-  if (Watchy::RTC.read(currentTime) == 0) {
-    setenv("TZ", Watchy_GetLocation::currentLocation.timezone, 1);
-    tzset();
-    time_t t = makeTime(currentTime);
-    setTime(t);
-    timeval tv = {t, 0};
-    settimeofday(&tv, nullptr);
+  assert(RTC.read(currentTime) == 0);
+  assert(validTime(currentTime) || fixTime(currentTime));
+  setenv("TZ", Watchy_GetLocation::currentLocation.timezone, 1);
+  tzset();
+  time_t t = makeTime(currentTime);
+  setTime(t);
+  timeval tv = {t, 0};
+  settimeofday(&tv, nullptr);
+}
+
+void init() {
+  start = micros();
+  Watchy_Event::BackgroundTask initTask("init", nullptr);
+  initTask.add();
+  esp_sleep_wakeup_cause_t wakeup_reason =
+      esp_sleep_get_wakeup_cause();  // get wake up reason
+  log_i("reason %s", wakeupReasonToString(wakeup_reason));
+  initTime();
+
+  for (auto &&owc : owcVec) {
+    owc(wakeup_reason);
   }
 
-  for (auto&& owc : owcVec) { owc(wakeup_reason); }
-
   switch (wakeup_reason) {
-#ifdef ESP_RTC
     case ESP_SLEEP_WAKEUP_TIMER:  // ESP Internal RTC
-      tmElements_t Watchy::currentTime;
+#ifdef ESP_RTC
+      tmElements_t currentTime;
       RTC.read(currentTime);
       currentTime.Minute++;
       tmElements_t tm;
@@ -149,62 +197,93 @@ void Watchy::init() {
       tm.Second = 0;
       time_t t = makeTime(tm);
       RTC.set(t);
-      showWatchFace(true);  // partial updates on tick
-      break;
 #endif
+      Watchy_Event::Event{
+          .id = Watchy_Event::UPDATE_SCREEN,
+          .micros = micros(),
+      }.send();
+      break;
     case ESP_SLEEP_WAKEUP_EXT0:  // RTC Alarm
+      RTC.alarm(ALARM_1);        // resets the alarm flag in the RTC
       RTC.alarm(ALARM_2);        // resets the alarm flag in the RTC
-      showWatchFace(true);       // partial updates on tick
+      Watchy_Event::Event{
+          .id = Watchy_Event::UPDATE_SCREEN,
+          .micros = micros(),
+      }.send();
       break;
     case ESP_SLEEP_WAKEUP_EXT1:  // button Press
       handleButtonPress();
       break;
     default:  // reset
-#ifndef ESP_RTC
       _rtcConfig();
-#endif
-      _bmaConfig();
+      bmaConfig();
       showWatchFace(false);  // full update on reset
       break;
   }
-  deepSleep();
+  initTask.remove();
+  do {
+    Watchy_Event::handle();
+  } while (Watchy_Event::BackgroundTask::running());
+  Watchy::deepSleep();
 }
 
-void Watchy::deepSleep() {
+void deepSleep() {
+  uint64_t elapsed = micros() - start;
   display.hibernate();
-#ifndef ESP_RTC
-  esp_sleep_enable_ext0_wakeup(RTC_PIN,
-                               0);  // enable deep sleep wake on RTC interrupt
-#endif
-#ifdef ESP_RTC
-  esp_sleep_enable_timer_wakeup(60000000);
-#endif
+  Watchy_Event::enableUpdateTimer();
   esp_sleep_enable_ext1_wakeup(
       BTN_PIN_MASK,
       ESP_EXT1_WAKEUP_ANY_HIGH);  // enable deep sleep wake on button press
+  log_i("%6d *** sleeping after %llu.%03llums ***\n", millis(), elapsed / 1000,
+        elapsed % 1000);
   esp_deep_sleep_start();
 }
 
 void _rtcConfig() {
+#ifndef ESP_RTC
   // https://github.com/JChristensen/DS3232RTC
-  RTC.squareWave(SQWAVE_NONE);  // disable square wave output
-  RTC.setAlarm(ALM2_EVERY_MINUTE, 0, 0, 0,
-               0);                    // alarm wakes up Watchy every minute
-  RTC.alarmInterrupt(ALARM_2, true);  // enable alarm interrupt
+  // OE = Control
+  // !EOSC | BBSQW | CONV | RS2 | RS1 | INTCN | A2IE | A1IE
+  // !EOSC: Enable Oscillator
+  // BBSQW: Battery-Backed Square-Wave Enable
+  // CONV: Convert Temperature
+  // RS2 | RS1: Rate Select in kHz (0 = 1, 1 = 1.024, 2 = 4.096, 3 = 8.192)
+  // INTCN: Interrupt Control
+  // A2IE: Alarm 2 Interrupt Enable
+  // A1IE: Alarm 1 Interrupt Enable
+
+  // 04 = Enable Oscillator | Enable Interrupts
+  RTC.writeRTC(0x0E, 0X04);
+
+  // OF = Control/Status
+  // OSF | BB32kHz | CRATE1 | CRATE0 | EN32kHz | BSY | A2F | A1F
+  // OSF: Oscillator Stop Flag
+  // BB32kHz: Battery-Backed 32kHz Output
+  // CRATE1 | CRATE0: Temperature Conversion Rate in Seconds (0=64, 1=128, 2=256, 3=512)
+  // EN32kHz: Enable 32kHz Output
+  // BSY: Busy
+  // A2F: Alarm 2 Flag
+  // A1F: Alarm 1 Flag
+
+  // 00 = Clear OSF, disable 32kHz, Convert every 64 secs, clear alarms
+  RTC.writeRTC(0x0F, 0X00);
+#endif
 }
 
-void Watchy::showWatchFace(bool partialRefresh, Screen *s) {
+void showWatchFace(bool partialRefresh, Screen *s) {
   display.init(
       0, false);  //_initial_refresh to false to prevent full update on init
   display.setFullWindow();
   display.setTextColor((s->bgColor == GxEPD_WHITE ? GxEPD_BLACK : GxEPD_WHITE));
-  display.setCursor(0,0);
+  display.setCursor(0, 0);
   s->show();
   display.display(partialRefresh);  // partial refresh
 }
 
+const Screen *getScreen() { return screen; }
+
 // setScreen is used to set a new screen on the display
-void Watchy::setScreen(Screen *s) {
+void setScreen(Screen *s) {
   if (s == nullptr) {
     return;
   }
@@ -212,129 +291,27 @@ void Watchy::setScreen(Screen *s) {
   showWatchFace(true);
 }
 
-uint16_t _readRegister(uint8_t address, uint8_t reg, uint8_t *data,
-                       uint16_t len) {
-  Wire.beginTransmission(address);
-  Wire.write(reg);
-  Wire.endTransmission();
-  Wire.requestFrom((uint8_t)address, (uint8_t)len);
-  uint8_t i = 0;
-  while (Wire.available()) {
-    data[i++] = Wire.read();
+// This mutex protects the WiFi object, wifiConnectionCount
+// and wifiReset
+auto wifiMutex = xSemaphoreCreateMutex();
+RTC_DATA_ATTR bool wifiReset = false;
+
+bool connectWiFi() {
+  // in theory this is re-entrant, but in practice if you call WiFi.begin()
+  // while it's still trying to connect, it will return an error. Better
+  // to serialize WiFi.begin()
+  if (!wifiReset) {
+    wifi_init_config_t wifi_config = WIFI_INIT_CONFIG_DEFAULT();
+    esp_wifi_init(&wifi_config);
+    wifiReset = true;
   }
-  return 0;
-}
-
-uint16_t _writeRegister(uint8_t address, uint8_t reg, uint8_t *data,
-                        uint16_t len) {
-  Wire.beginTransmission(address);
-  Wire.write(reg);
-  Wire.write(data, len);
-  return (0 != Wire.endTransmission());
-}
-
-void _bmaConfig() {
-  if (sensor.begin(_readRegister, _writeRegister, delay) == false) {
-    // fail to init BMA
-    return;
-  }
-
-  // Accel parameter structure
-  Acfg cfg;
-  /*!
-      Output data rate in Hz, Optional parameters:
-          - BMA4_OUTPUT_DATA_RATE_0_78HZ
-          - BMA4_OUTPUT_DATA_RATE_1_56HZ
-          - BMA4_OUTPUT_DATA_RATE_3_12HZ
-          - BMA4_OUTPUT_DATA_RATE_6_25HZ
-          - BMA4_OUTPUT_DATA_RATE_12_5HZ
-          - BMA4_OUTPUT_DATA_RATE_25HZ
-          - BMA4_OUTPUT_DATA_RATE_50HZ
-          - BMA4_OUTPUT_DATA_RATE_100HZ
-          - BMA4_OUTPUT_DATA_RATE_200HZ
-          - BMA4_OUTPUT_DATA_RATE_400HZ
-          - BMA4_OUTPUT_DATA_RATE_800HZ
-          - BMA4_OUTPUT_DATA_RATE_1600HZ
-  */
-  cfg.odr = BMA4_OUTPUT_DATA_RATE_100HZ;
-  /*!
-      G-range, Optional parameters:
-          - BMA4_ACCEL_RANGE_2G
-          - BMA4_ACCEL_RANGE_4G
-          - BMA4_ACCEL_RANGE_8G
-          - BMA4_ACCEL_RANGE_16G
-  */
-  cfg.range = BMA4_ACCEL_RANGE_2G;
-  /*!
-      Bandwidth parameter, determines filter configuration, Optional parameters:
-          - BMA4_ACCEL_OSR4_AVG1
-          - BMA4_ACCEL_OSR2_AVG2
-          - BMA4_ACCEL_NORMAL_AVG4
-          - BMA4_ACCEL_CIC_AVG8
-          - BMA4_ACCEL_RES_AVG16
-          - BMA4_ACCEL_RES_AVG32
-          - BMA4_ACCEL_RES_AVG64
-          - BMA4_ACCEL_RES_AVG128
-  */
-  cfg.bandwidth = BMA4_ACCEL_NORMAL_AVG4;
-
-  /*! Filter performance mode , Optional parameters:
-      - BMA4_CIC_AVG_MODE
-      - BMA4_CONTINUOUS_MODE
-  */
-  cfg.perf_mode = BMA4_CONTINUOUS_MODE;
-
-  // Configure the BMA423 accelerometer
-  sensor.setAccelConfig(cfg);
-
-  // Enable BMA423 accelerometer
-  // Warning : Need to use feature, you must first enable the accelerometer
-  // Warning : Need to use feature, you must first enable the accelerometer
-  sensor.enableAccel();
-
-  struct bma4_int_pin_config config;
-  config.edge_ctrl = BMA4_LEVEL_TRIGGER;
-  config.lvl = BMA4_ACTIVE_HIGH;
-  config.od = BMA4_PUSH_PULL;
-  config.output_en = BMA4_OUTPUT_ENABLE;
-  config.input_en = BMA4_INPUT_DISABLE;
-  // The correct trigger interrupt needs to be configured as needed
-  sensor.setINTPinConfig(config, BMA4_INTR1_MAP);
-
-  struct bma423_axes_remap remap_data;
-  remap_data.x_axis = 1;
-  remap_data.x_axis_sign = 0xFF;
-  remap_data.y_axis = 0;
-  remap_data.y_axis_sign = 0xFF;
-  remap_data.z_axis = 2;
-  remap_data.z_axis_sign = 0xFF;
-  // Need to raise the wrist function, need to set the correct axis
-  sensor.setRemapAxes(&remap_data);
-
-  // Enable BMA423 isStepCounter feature
-  sensor.enableFeature(BMA423_STEP_CNTR, true);
-  // Enable BMA423 isTilt feature
-  sensor.enableFeature(BMA423_TILT, true);
-  // Enable BMA423 isDoubleClick feature
-  sensor.enableFeature(BMA423_WAKEUP, true);
-
-  // Reset steps
-  sensor.resetStepCounter();
-
-  // Turn on feature interrupt
-  sensor.enableStepCountInterrupt();
-  sensor.enableTiltInterrupt();
-  // It corresponds to isDoubleClick interrupt
-  sensor.enableWakeupInterrupt();
-}
-
-bool Watchy::connectWiFi() {
 #if !defined(WIFI_SSID) || !defined(WIFI_PASSWORD)
   if (WL_CONNECT_FAILED == WiFi.begin()) {
     // WiFi not setup, you can also use hard coded credentials with
     // WiFi.begin(SSID,PASS); by defining WIFI_SSID and WIFI_PASSWORD
 #else
-  if (WL_CONNECT_FAILED == WiFi.begin() && WL_CONNECT_FAILED == WiFi.begin(WIFI_SSID,WIFI_PASSWORD)) {
+  if (WL_CONNECT_FAILED == WiFi.begin() &&
+      WL_CONNECT_FAILED == WiFi.begin(WIFI_SSID, WIFI_PASSWORD)) {
     // WiFi not setup
 #endif
     WIFI_CONFIGURED = false;
@@ -351,3 +328,31 @@ bool Watchy::connectWiFi() {
   }
   return WIFI_CONFIGURED;
 }
+
+unsigned int wifiConnectionCount = 0;
+
+bool getWiFi() {
+  xSemaphoreTake(wifiMutex, portMAX_DELAY);
+  if (wifiConnectionCount == 0) {
+    if (!connectWiFi()) {
+      xSemaphoreGive(wifiMutex);
+      return false;
+    }
+    log_d("wifi connected");
+  }
+  wifiConnectionCount++;
+  xSemaphoreGive(wifiMutex);
+  return true;
+}
+
+void releaseWiFi() {
+  xSemaphoreTake(wifiMutex, portMAX_DELAY);
+  wifiConnectionCount--;
+  if (wifiConnectionCount == 0) {
+    log_d("wifi disconnected");
+    btStop();
+    WiFi.mode(WIFI_OFF);
+  }
+  xSemaphoreGive(wifiMutex);
+}
+}  // namespace Watchy

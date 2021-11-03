@@ -8,10 +8,8 @@ namespace Watchy_SyncTime {
 // but can be set to a more specific ntp server if known
 extern const char* ntpServer;
 
-constexpr const char *DEFAULT_TIMEZONE = "UTC0"; // posix format
-
 extern time_t lastSyncTimeTS; // timestamp of last successful syncTime
 // sets RTC, now() and time() to UTC
 // sets current timezone so that localtime works
-extern void syncTime(const char* timezone = DEFAULT_TIMEZONE);
+extern void syncTime(const char* timezone);
 };  // namespace Watchy_SyncTime

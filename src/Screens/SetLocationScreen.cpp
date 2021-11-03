@@ -17,6 +17,7 @@ void printLocation(const Watchy_GetLocation::location *loc) {
 }
 
 void SetLocationScreen::show() {
+  Watchy_Event::setUpdateInterval(0);
   Watchy::display.fillScreen(bgColor);
   Watchy::display.setFont(OptimaLTStd12pt7b);
   switch (getLocationState) {
@@ -26,16 +27,16 @@ void SetLocationScreen::show() {
       Watchy::display.display(true);
       Watchy::display.fillScreen(bgColor);
       Watchy::display.setCursor(0, 0);
-      auto loc = Watchy_GetLocation::getLocation();
+      Watchy_GetLocation::getLocation();
       getLocationState = done;
-      printLocation(loc);
+      printLocation(&Watchy_GetLocation::currentLocation);
       break;
     }
     case waiting:
       Watchy::display.print("\nwaiting");
       break;
     case done:
-      printLocation(Watchy_GetLocation::getLocation());
+      printLocation(&Watchy_GetLocation::currentLocation);
       break;
     default:
       return;

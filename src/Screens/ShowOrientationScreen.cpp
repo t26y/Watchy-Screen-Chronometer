@@ -2,10 +2,12 @@
 
 #include "../Fonts/OptimaLTStd12pt7b.h"
 #include "Watchy.h"
+#include "Events.h"
 
-void ShowOrientationScreen::showMe() {
+void ShowOrientationScreen::show() {
+  Watchy_Event::setUpdateInterval(200);
   Watchy::display.fillScreen(bgColor);
-  Watchy::display.setCursor(0,0);
+  Watchy::display.setFont(OptimaLTStd12pt7b);
   Accel acc;
   if (Watchy::sensor.getAccel(acc)) {
     Watchy::display.printf("\n  X: %d", acc.x);
@@ -40,24 +42,4 @@ void ShowOrientationScreen::showMe() {
       break;
   }
   Watchy::display.printf("\npress back to exit");
-  Watchy::display.display(true);
-}
-
-void ShowOrientationScreen::show() {
-  Watchy::display.fillScreen(bgColor);
-  Watchy::display.setFont(OptimaLTStd12pt7b);
-  showing = true;
-  while (showing) {
-    showMe();
-    auto timeout = millis() + 200;
-    while (millis() < timeout) {
-      Watchy::pollButtonsAndDispatch();
-      yield();
-    }
-  }
-}
-
-void ShowOrientationScreen::back() {
-  showing = false;
-  Screen::back();
 }

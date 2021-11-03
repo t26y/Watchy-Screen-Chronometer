@@ -1,135 +1,99 @@
 #include "UpdateFWScreen.h"
 
-#include "../Fonts/OptimaLTStd12pt7b.h"
+#include <freertos/task.h>
+
+#include "OptimaLTStd12pt7b.h"
 #include "Screen.h"
 #include "Watchy.h"
 
-using namespace Watchy;
+RTC_DATA_ATTR int currentStatus; // ugly, should be a member
 
 class : public Screen {
-  void show() {
-    Watchy::display.fillScreen(bgColor);
-    display.setFont(OptimaLTStd12pt7b);
-    display.println("\nBLE Connected!");
-    display.println();
-    display.println("Waiting for");
-    display.println("upload...");
-  }
-} updateFWConnectedScreen;
-
-class : public Screen {
-  void show() {
-    Watchy::display.fillScreen(bgColor);
-    display.setFont(OptimaLTStd12pt7b);
-    display.println("\nDownload");
-    display.println("completed!");
-    display.println();
-    display.println("Rebooting...");
-  }
-} updateFWDownloadCompleteScreen;
-
-class : public Screen {
-  void show() {
-    Watchy::display.fillScreen(bgColor);
-    display.setFont(OptimaLTStd12pt7b);
-    display.println("\nBLE Disconnected!");
-    display.println();
-    display.println("exiting...");
-  }
-} updateFWDisconnectedScreen;
-
-void btPoll(Screen *s) {
-  BLE BT;
-
+ private:
   // this local class variable only works because we
   // never deep sleep while doing BLE OTA
-  class updateFWDownloadingScreen : public Screen {
-   private:
-    BLE &BT;
+  BLE BT;
 
-   public:
-    updateFWDownloadingScreen(BLE &bt, uint16_t bg = GxEPD_WHITE) : Screen(bg), BT(bt) {}
-    void show() {
-      Watchy::display.fillScreen(bgColor);
-      display.setFont(OptimaLTStd12pt7b);
-      display.println("\nDownloading");
-      display.println("firmware:");
-      display.println();
-      display.printf("%d bytes", BT.howManyBytes());
-    }
-  } updateFWDownloadingScreen(BT);
-
-  BT.begin("Watchy BLE OTA");
-
-  int prevStatus = -1;
-  int currentStatus;
-
-  // only exits on download complete, or disconnect
-  while (1) {
-    currentStatus = BT.updateStatus();
-    if (prevStatus != currentStatus) {
-      switch (currentStatus) {
-        case 0:
-          setScreen(&updateFWConnectedScreen);
-          break;
-        case 1:
-          setScreen(&updateFWDownloadingScreen);
-          break;
-        case 2:
-          setScreen(&updateFWDownloadCompleteScreen);
-          delay(2000);
-          esp_restart();  // does not return
-        case 4:
-          setScreen(&updateFWDisconnectedScreen);
-          delay(1000);
-
-          // turn off radios
-          WiFi.mode(WIFI_OFF);
-          btStop();
-          setScreen(s->parent);
-          return;
-        default:
-          break;
-      }
-      prevStatus = currentStatus;
-      delay(100);  // feed the watchdog
-    } else if (prevStatus == 1) {
-      showWatchFace(true);
-      delay(1000); // update progress every 1 sec
-    }
-    yield();
-  }
-}
-
-class : public Screen {
+ public:
   void show() {
-    Watchy::display.fillScreen(bgColor);
-    display.setFont(OptimaLTStd12pt7b);
-    display.println("\nBluetooth Started");
-    display.println();
-    display.println("Watchy BLE OTA");
-    display.println();
-    display.println("Waiting for");
-    display.println("connection...");
+    Watchy_Event::setUpdateInterval(0);
+    BT.begin("Watchy BLE OTA");
+    TickType_t ticks = xTaskGetTickCount();
+    for (;;) {
+      int status = BT.getStatus();
+      if (currentStatus != status || currentStatus == 1) {
+        currentStatus = status;
+        Watchy::display.setTextColor(
+            (bgColor == GxEPD_WHITE ? GxEPD_BLACK : GxEPD_WHITE));
+        Watchy::display.setCursor(0, 0);
+        Watchy::display.fillScreen(bgColor);
+        Watchy::display.setFont(OptimaLTStd12pt7b);
+        switch (BT.getStatus()) {
+          case 0:
+            Watchy::display.println("\nBLE Connected!");
+            Watchy::display.println();
+            Watchy::display.println("Waiting for");
+            Watchy::display.println("upload...");
+            break;
+          case 1:
+            Watchy::display.println("\nDownloading");
+            Watchy::display.println("firmware:");
+            Watchy::display.println();
+            Watchy::display.printf("%d bytes", BT.getBytesReceived());
+            break;
+          case 2:
+            Watchy::display.println("\nDownload");
+            Watchy::display.println("completed!");
+            Watchy::display.println();
+            Watchy::display.println("Press menu to");
+            Watchy::display.println("reboot");
+            return;
+          case 4:
+            Watchy::display.println("\nBLE Disconnected!");
+            Watchy::display.println();
+            Watchy::display.println("Press back to");
+            Watchy::display.println("exit");
+            return;
+          default:
+            Watchy::display.println("\nBluetooth Started");
+            Watchy::display.println();
+            Watchy::display.println("Watchy BLE OTA");
+            Watchy::display.println();
+            Watchy::display.println("Waiting for");
+            Watchy::display.println("connection...");
+            log_i("waiting for BT");
+            break;
+        }
+        Watchy::display.display(true);
+      }
+      vTaskDelayUntil(&ticks, pdMS_TO_TICKS(1000));
+    }
+  }
 
-    btPoll(this); // smells like a private method
+  void menu() override {
+    if (currentStatus == 2) {
+      esp_restart();  // does not return
+    }
+  }
+
+  void back() override {
+    // turn off radios
+    WiFi.mode(WIFI_OFF);
+    btStop();
+    Watchy::setScreen(parent);
   }
 } updateFWBeginScreen;
 
 void UpdateFWScreen::show() {
+  Watchy_Event::setUpdateInterval(0);
   Watchy::display.fillScreen(bgColor);
-  display.setFont(OptimaLTStd12pt7b);
-  display.println("\nPlease Visit");
-  display.println("watchy.sqfmi.com");
-  display.println("with a Bluetooth");
-  display.println("enabled device");
-  display.println();
-  display.println("Press menu button");
-  display.println("again when ready");
-  display.println();
-  display.println("Keep USB powered");
-
-  BLE BT;
+  Watchy::display.setFont(OptimaLTStd12pt7b);
+  Watchy::display.println("\nVisit");
+  Watchy::display.println("watchy.sqfmi.com");
+  Watchy::display.println("in a Bluetooth");
+  Watchy::display.println("enabled browser");
+  Watchy::display.println("On USB power");
+  Watchy::display.println("Then press menu");
 }
 
-void UpdateFWScreen::menu() { setScreen(&updateFWBeginScreen); }
+void UpdateFWScreen::menu() { Watchy::setScreen(&updateFWBeginScreen); }

@@ -16,7 +16,7 @@ esp_adc_cal_characteristics_t *getADCCharacteristics() {
     esp_adc_cal_value_t cal = esp_adc_cal_characterize(
         ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, 1100, adc_chars);
     if (cal == ESP_ADC_CAL_VAL_DEFAULT_VREF) {
-      LOGW("adc calibration is using default vref. Accuracy will suffer.");
+      log_w("adc calibration is using default vref. Accuracy will suffer.");
     }
   }
   return adc_chars;

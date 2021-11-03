@@ -4,77 +4,47 @@
 #include "Screen.h"
 #include "Watchy.h"
 
-using namespace Watchy;
-
 const int WIFI_AP_TIMEOUT = 60;
 
-RTC_DATA_ATTR enum WifiSetupState { start, success, fail } wifiSetupState;
-
 void _configModeCallback(WiFiManager *myWiFiManager) {
-  display.println("Connect to");
-  display.print("SSID: ");
-  display.println(WIFI_AP_SSID);
-  display.print("IP: ");
-  display.println(WiFi.softAPIP());
-  display.display(true);
-  display.hibernate();
+  Watchy::display.println("Connect to");
+  Watchy::display.print("SSID: ");
+  Watchy::display.println(WIFI_AP_SSID);
+  Watchy::display.print("IP: ");
+  Watchy::display.println(WiFi.softAPIP());
+  Watchy::display.display(true);
 }
 
 void SetupWifiScreen::show() {
-  // this is a little ugly the show() method blocks without
-  // showing anything in autoConnect, and lets _configModeCallback
-  // set the display
+  Watchy_Event::setUpdateInterval(0);
   Watchy::display.fillScreen(bgColor);
-  display.setFont(OptimaLTStd12pt7b);
-  display.setCursor(0, 30);
+  Watchy::display.setFont(OptimaLTStd12pt7b);
+  Watchy::display.setCursor(0, 30);
 
-  switch (wifiSetupState) {
-    case success:
-      display.println("Wifi setup");
-      display.println("succeeded");
-      if (WIFI_CONFIGURED) {
-        display.println("Connected to");
-        display.println(WiFi.SSID());
-      }
-      display.println("press back");
-      display.println("to return to menu");
-      break;
+  WiFiManager wifiManager;
+  wifiManager.resetSettings();
+  wifiManager.setTimeout(WIFI_AP_TIMEOUT);
+  wifiManager.setAPCallback(_configModeCallback);
+  Watchy::WIFI_CONFIGURED = wifiManager.autoConnect(WIFI_AP_SSID);
 
-    case fail:
-      display.println("Wifi setup");
-      display.println("failed");
-      display.println("Connection");
-      display.println("timed out!");
-      display.println("press back");
-      display.println("to return to menu");
-      break;
+  Watchy::display.fillScreen(bgColor);
+  Watchy::display.setFont(OptimaLTStd12pt7b);
+  Watchy::display.setCursor(0, 30);
 
-    default:
-      WiFiManager wifiManager;
-      wifiManager.resetSettings();
-      wifiManager.setTimeout(WIFI_AP_TIMEOUT);
-      wifiManager.setAPCallback(_configModeCallback);
-
-      // now we just wait for <timeout> to see if we connect?
-      if (!wifiManager.autoConnect(WIFI_AP_SSID)) {
-        WIFI_CONFIGURED = false;
-        wifiSetupState = fail;
-      } else {
-        WIFI_CONFIGURED = true;
-        wifiSetupState = success;
-      }
-      // turn off radios
-      WIFI_CONFIGURED = false;
-      WiFi.mode(WIFI_OFF);
-      btStop();
-      break;
+  if (Watchy::WIFI_CONFIGURED) {
+    Watchy::display.println("Success!");
+    Watchy::display.println("Connected to");
+    Watchy::display.println(WiFi.SSID());
+    Watchy::display.println("press back");
+    Watchy::display.println("to return to menu");
+  } else {
+    Watchy::display.println("Wifi setup");
+    Watchy::display.println("failed");
+    Watchy::display.println("Connection");
+    Watchy::display.println("timed out!");
+    Watchy::display.println("press back");
+    Watchy::display.println("to return to menu");
   }
-
-  display.display(true);
-  display.hibernate();
-}
-
-void SetupWifiScreen::back() {
-  wifiSetupState = start;
-  Screen::back();
+  btStop();
+  WiFi.mode(WIFI_OFF);
 }
