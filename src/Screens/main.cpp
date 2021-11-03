@@ -6,7 +6,7 @@
 #include "IconScreen.h"
 #include "ImageScreen.h"
 #include "MenuScreen.h"
-#include "OptimaLTStd22pt7b.h"
+#include "../Fonts/OptimaLTStd22pt7b.h"
 #include "OTAScreen.h"
 #include "SetLocationScreen.h"
 #include "SetTimeScreen.h"
@@ -24,7 +24,7 @@
 #include "WatchyErrors.h"
 #include "WeatherScreen.h"
 #include "WrappedTextScreen.h"
-#include "icons.h"
+#include "../Images/icons.h"
 
 #include <time.h>
 

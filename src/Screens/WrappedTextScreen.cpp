@@ -1,7 +1,7 @@
 #include "WrappedTextScreen.h"
 
 #include "GFXTextUtil.h"
-#include "../Fonts/OptimaLTStd7pt7b.h"
+#include "../Fonts/../Fonts/OptimaLTStd7pt7b.h"
 #include "Watchy.h"
 
 void WrappedTextScreen::show() {

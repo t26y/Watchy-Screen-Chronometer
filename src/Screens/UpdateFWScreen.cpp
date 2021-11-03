@@ -2,7 +2,7 @@
 
 #include <freertos/task.h>
 
-#include "OptimaLTStd12pt7b.h"
+#include "../Fonts/OptimaLTStd12pt7b.h"
 #include "Screen.h"
 #include "Watchy.h"
 

@@ -1,7 +1,7 @@
 #include "WeatherScreen.h"
 
 #include "GetWeather.h"
-#include "../Fonts/OptimaLTStd12pt7b.h"
+#include "../Fonts/../Fonts/OptimaLTStd12pt7b.h"
 
 using namespace Watchy;
 

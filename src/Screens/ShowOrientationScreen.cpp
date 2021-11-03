@@ -1,6 +1,6 @@
 #include "ShowOrientationScreen.h"
 
-#include "../Fonts/OptimaLTStd12pt7b.h"
+#include "../Fonts/../Fonts/OptimaLTStd12pt7b.h"
 #include "Watchy.h"
 #include "Events.h"
 

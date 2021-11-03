@@ -1,8 +1,8 @@
 #include "SetTimeScreen.h"
 
 #include "Events.h"
-#include "OptimaLTStd12pt7b.h"
-#include "OptimaLTStd_Black32pt7b.h"
+#include "../Fonts/OptimaLTStd12pt7b.h"
+#include "../Fonts/OptimaLTStd_Black32pt7b.h"
 #include "Watchy.h"
 
 using namespace Watchy;

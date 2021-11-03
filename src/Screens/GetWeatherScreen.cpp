@@ -3,7 +3,7 @@
 #include <Arduino_JSON.h>
 
 #include "GetWeather.h"
-#include "../Fonts/OptimaLTStd12pt7b.h"
+#include "../Fonts/../Fonts/OptimaLTStd12pt7b.h"
 #include "Watchy.h"
 
 RTC_DATA_ATTR enum GetWeatherState {
