@@ -133,6 +133,9 @@ void TimeScreen::drawWatchface(tm t, float battery) {
 }
 
 void TimeScreen::show() {
+  // show once every minute
+  Watchy_Event::setUpdateInterval(SECS_PER_MIN*1000);
+
   fgColor = bgColor == GxEPD_WHITE ? GxEPD_BLACK : GxEPD_WHITE;
 
   tm t;
